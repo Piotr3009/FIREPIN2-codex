@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  OPERATIVE
+}
+
+enum PenetrationType {
+  pipe
+  cable
+  duct
+  mixed
+}
+
+enum PinStatus {
+  new
+  in_progress
+  needs_remedial
+  approved
+}
+
+enum PinPhotoType {
+  location
+  after
+}
+
+enum PricingModel {
+  flat_per_pin
+  area_mm2
+  linear_mm
+  quantity_based
+  base_plus_overage
+  manual_override
+}
+
+model User {
+  id           String          @id @default(cuid())
+  name         String
+  email        String          @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  memberships  ProjectMember[]
+  assignedPins Pin[]           @relation("AssignedPins")
+}
+
+model Project {
+  id            String          @id @default(cuid())
+  name          String
+  clientName    String
+  ukAddress     String
+  projectNumber String          @unique
+  createdAt     DateTime        @default(now())
+  members       ProjectMember[]
+  floors        Floor[]
+  pins          Pin[]
+  reports       ReportFile[]
+}
+
+model ProjectMember {
+  userId    String
+  projectId String
+  role      Role
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+}
+
+model Floor {
+  id        String @id @default(cuid())
+  projectId String
+  name      String
+  sortOrder Int
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  zones     Zone[]
+  pins      Pin[]
+}
+
+model Zone {
+  id        String @id @default(cuid())
+  floorId   String
+  name      String
+  sortOrder Int
+  floor     Floor   @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  drawings  Drawing[]
+  pins      Pin[]
+}
+
+model Drawing {
+  id         String       @id @default(cuid())
+  zoneId     String
+  title      String
+  pdfPath    String
+  revision   String
+  uploadedAt DateTime     @default(now())
+  zone       Zone         @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  pages      DrawingPage[]
+  pins       Pin[]
+}
+
+model DrawingPage {
+  id               String @id @default(cuid())
+  drawingId        String
+  pageNumber       Int
+  pageLabel        String
+  width            Int
+  height           Int
+  previewImagePath String?
+  drawing          Drawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  pins             Pin[]
+}
+
+model SystemCatalogItem {
+  id                 String          @id @default(cuid())
+  manufacturer       String
+  systemName         String
+  referenceCode      String
+  penetrationType    PenetrationType
+  fireRating         String
+  minWidthMm         Int?
+  maxWidthMm         Int?
+  minHeightMm        Int?
+  maxHeightMm        Int?
+  minDiameterMm      Int?
+  maxDiameterMm      Int?
+  technicalDrawingPath String?
+  instructions       String
+  pricingModel       PricingModel
+  unitPrice          Decimal?        @db.Decimal(10,2)
+  basePrice          Decimal?        @db.Decimal(10,2)
+  includedAreaMm2    Int?
+  includedLengthMm   Int?
+  overageUnitPrice   Decimal?        @db.Decimal(10,2)
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  pins               Pin[]
+}
+
+model Pin {
+  id                 String          @id @default(cuid())
+  projectId          String
+  floorId            String
+  zoneId             String
+  drawingId          String
+  drawingPageId      String
+  pinNumber          String
+  xPercent           Float
+  yPercent           Float
+  locationPhotoPath  String?
+  penetrationType    PenetrationType
+  widthMm            Int?
+  heightMm           Int?
+  diameterMm         Int?
+  selectedSystemId   String?
+  priceNet           Decimal?        @db.Decimal(10,2)
+  priceCalculationJson Json?
+  assignedOperativeId String?
+  status             PinStatus       @default(new)
+  remedialComment    String?
+  instructionSnapshot String?
+  systemSnapshotJson Json?
+  createdById        String
+  updatedById        String
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  project            Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  floor              Floor           @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  zone               Zone            @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  drawing            Drawing         @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  drawingPage        DrawingPage     @relation(fields: [drawingPageId], references: [id], onDelete: Cascade)
+  selectedSystem     SystemCatalogItem? @relation(fields: [selectedSystemId], references: [id])
+  assignedOperative  User?           @relation("AssignedPins", fields: [assignedOperativeId], references: [id])
+  photos             PinPhoto[]
+  history            PinHistory[]
+}
+
+model PinPhoto {
+  id           String       @id @default(cuid())
+  pinId         String
+  type          PinPhotoType
+  path          String
+  caption       String?
+  uploadedById  String
+  uploadedAt    DateTime    @default(now())
+  pin           Pin         @relation(fields: [pinId], references: [id], onDelete: Cascade)
+}
+
+model PinHistory {
+  id           String   @id @default(cuid())
+  pinId         String
+  actionType    String
+  fromStatus    PinStatus?
+  toStatus      PinStatus?
+  comment       String?
+  createdById   String
+  createdAt     DateTime @default(now())
+  pin           Pin      @relation(fields: [pinId], references: [id], onDelete: Cascade)
+}
+
+model ReportFile {
+  id          String   @id @default(cuid())
+  projectId   String
+  path        String
+  createdById String
+  createdAt   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
